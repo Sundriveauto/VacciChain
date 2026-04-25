@@ -4,6 +4,7 @@ import PatientDashboard from './pages/PatientDashboard';
 import IssuerDashboard from './pages/IssuerDashboard';
 import VerifyPage from './pages/VerifyPage';
 import { AuthProvider } from './hooks/useFreighter';
+import FreighterBanner from './components/FreighterBanner';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Link to="/issuer">Issue</Link>
         <Link to="/verify">Verify</Link>
       </nav>
+      <FreighterBanner />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/patient" element={<PatientDashboard />} />
