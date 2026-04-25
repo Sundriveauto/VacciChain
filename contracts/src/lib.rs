@@ -5,6 +5,9 @@ mod events;
 mod mint;
 mod verify;
 
+use soroban_sdk::{contract, contractimpl, contracterror, Address, Env, String, Vec};
+use storage::{DataKey, VaccinationRecord, hash_address};
+
 use soroban_sdk::{contract, contractimpl, contracterror, Address, BytesN, Env, String, Vec};
 use storage::{DataKey, IssuerRecord, VaccinationRecord};
 
@@ -52,6 +55,7 @@ impl VacciChainContract {
     pub fn add_issuer(env: Env, issuer: Address, name: String, license: String, country: String) {
         let admin: Address = env.storage().persistent().get(&DataKey::Admin).expect("not initialized");
         admin.require_auth();
+        env.storage().persistent().set(&DataKey::Issuer(hash_address(&env, &issuer)), &true);
 
         let record = IssuerRecord {
             name,
@@ -73,6 +77,8 @@ impl VacciChainContract {
     pub fn revoke_issuer(env: Env, issuer: Address) {
         let admin: Address = env.storage().persistent().get(&DataKey::Admin).expect("not initialized");
         admin.require_auth();
+        env.storage().persistent().set(&DataKey::Issuer(hash_address(&env, &issuer)), &false);
+        events::emit_issuer_revoked(&env, &issuer, &admin);
 
         if let Some(mut record) = env.storage().persistent().get::<DataKey, IssuerRecord>(&DataKey::Issuer(issuer.clone())) {
             record.authorized = false;
@@ -147,6 +153,7 @@ impl VacciChainContract {
     pub fn is_issuer(env: Env, address: Address) -> bool {
         env.storage()
             .persistent()
+            .get(&DataKey::Issuer(hash_address(&env, &address)))
             .get::<DataKey, IssuerRecord>(&DataKey::Issuer(address))
             .map(|r| r.authorized)
             .unwrap_or(false)
@@ -195,6 +202,7 @@ impl VacciChainContract {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env, String};
     use soroban_sdk::{testutils::{Address as _, Ledger}, BytesN, Env, String};
 
     #[test]
@@ -210,6 +218,7 @@ mod tests {
         let patient = Address::generate(&env);
 
         client.initialize(&admin);
+        client.add_issuer(&issuer);
         client.add_issuer(
             &issuer,
             &String::from_str(&env, "General Hospital"),
@@ -267,6 +276,8 @@ mod tests {
         let fake_issuer = Address::generate(&env);
         let patient = Address::generate(&env);
 
+        client.initialize(&admin);
+        client.mint_vaccination(
         client.initialize(&admin).unwrap();
 
         let result = client.try_mint_vaccination(
@@ -291,6 +302,7 @@ mod tests {
         let patient = Address::generate(&env);
 
         client.initialize(&admin);
+        client.add_issuer(&issuer);
         client.add_issuer(
             &issuer,
             &String::from_str(&env, "General Hospital"),
