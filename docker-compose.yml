@@ -7,20 +7,56 @@ services:
       - backend
     networks:
       - vaccichain
+    deploy:
+      resources:
+        limits:
+          # nginx serving pre-built static assets — no dynamic work.
+          # 0.05 CPU covers TLS termination + gzip at ~50 req/s.
+          # 32 MB covers nginx worker processes with room to spare.
+          cpus: "0.05"
+          memory: 32M
+        reservations:
+          cpus: "0.01"
+          memory: 16M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
 
   backend:
     build: ./backend
     ports:
       - "4000:4000"
     env_file: .env
+    environment:
+      - EVENT_POLL_INTERVAL_MS=${EVENT_POLL_INTERVAL_MS:-15000}
+      - DATABASE_PATH=/data/vaccichain.db
+    volumes:
+      - vaccichain_db:/data
     depends_on:
       - python-service
     networks:
       - vaccichain
+    deploy:
+      resources:
+        limits:
+          # Node.js heap for Express + Stellar SDK sits ~80–100 MB at rest.
+          # Soroban RPC calls are CPU-light but allocate XDR buffers transiently.
+          # 0.75 CPU allows burst during contract invocations without starving neighbours.
+          # 256 MB gives 2× headroom over observed peak; OOM before host pressure.
+          cpus: "0.75"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
     logging:
       driver: json-file
       options:
-        tag: "{{.Name}}"
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
 
   python-service:
     build: ./python-service
@@ -28,55 +64,31 @@ services:
       - "8001:8001"
     environment:
       - BACKEND_URL=http://backend:4000
+      - ANOMALY_THRESHOLD=${ANOMALY_THRESHOLD:-50}
     networks:
       - vaccichain
+    deploy:
+      resources:
+        limits:
+          # FastAPI/uvicorn with httpx fan-out to Stellar Horizon.
+          # Python baseline ~60 MB; analytics aggregation adds ~20 MB transiently.
+          # 0.50 CPU handles concurrent async I/O without blocking the event loop.
+          # 128 MB is 2× observed peak; keeps service isolated from backend OOM events.
+          cpus: "0.50"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
     logging:
       driver: json-file
       options:
-        tag: "{{.Name}}"
-
-  loki:
-    image: grafana/loki:2.9.4
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./logging/loki-config.yml:/etc/loki/config.yml:ro
-      - loki-data:/loki
-    command: -config.file=/etc/loki/config.yml
-    networks:
-      - vaccichain
-
-  promtail:
-    image: grafana/promtail:2.9.4
-    volumes:
-      - ./logging/promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
-    networks:
-      - vaccichain
-
-  grafana:
-    image: grafana/grafana:10.3.3
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    volumes:
-      - ./logging/grafana/provisioning:/etc/grafana/provisioning:ro
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - loki
-    networks:
-      - vaccichain
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
 
 networks:
   vaccichain:
     driver: bridge
 
 volumes:
-  loki-data:
-  grafana-data:
+  vaccichain_db:

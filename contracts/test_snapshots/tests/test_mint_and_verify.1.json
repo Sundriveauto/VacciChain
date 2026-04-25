@@ -180,7 +180,7 @@
                   "symbol": "Issuer"
                 },
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  "bytes": "ecb834aa2cf280ff49bec7c0e8c40383912f02678271e5c078d6c0944580e50d"
                 }
               ]
             },
@@ -200,7 +200,7 @@
                       "symbol": "Issuer"
                     },
                     {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                      "bytes": "ecb834aa2cf280ff49bec7c0e8c40383912f02678271e5c078d6c0944580e50d"
                     }
                   ]
                 },
@@ -297,7 +297,7 @@
                   "symbol": "PatientTokens"
                 },
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  "bytes": "03b07df31ca4bcd5754b472170dd2e99570c11b0f73d632d4ad64170ddff48e3"
                 }
               ]
             },
@@ -317,7 +317,7 @@
                       "symbol": "PatientTokens"
                     },
                     {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                      "bytes": "03b07df31ca4bcd5754b472170dd2e99570c11b0f73d632d4ad64170ddff48e3"
                     }
                   ]
                 },
@@ -395,6 +395,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "schema_version"
+                      },
+                      "val": {
+                        "u32": 1
                       }
                     },
                     {

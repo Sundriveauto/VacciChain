@@ -1,7 +1,9 @@
 use soroban_sdk::{Env, Address, String, Vec};
+use crate::storage::{DataKey, VaccinationRecord, hash_address};
 use crate::storage::{DataKey, VaccinationRecord, IssuerRecord};
 use crate::events;
 use crate::ContractError;
+use crate::validate_input_length;
 
 pub fn mint_vaccination(
     env: &Env,
@@ -10,6 +12,9 @@ pub fn mint_vaccination(
     date_administered: String,
     issuer: Address,
 ) -> Result<u64, ContractError> {
+    validate_input_length(&vaccine_name, "vaccine_name")?;
+    validate_input_length(&date_administered, "date_administered")?;
+
     // Require issuer auth
     issuer.require_auth();
 
@@ -17,6 +22,7 @@ pub fn mint_vaccination(
     let is_authorized: bool = env
         .storage()
         .persistent()
+        .get(&DataKey::Issuer(hash_address(env, &issuer)))
         .get::<DataKey, IssuerRecord>(&DataKey::Issuer(issuer.clone()))
         .map(|r| r.authorized)
         .unwrap_or(false);
@@ -28,7 +34,7 @@ pub fn mint_vaccination(
     let tokens: Vec<u64> = env
         .storage()
         .persistent()
-        .get(&DataKey::PatientTokens(patient.clone()))
+        .get(&DataKey::PatientTokens(hash_address(env, &patient)))
         .unwrap_or(Vec::new(env));
 
     for i in 0..tokens.len() {
@@ -57,6 +63,8 @@ pub fn mint_vaccination(
         date_administered,
         issuer: issuer.clone(),
         timestamp: env.ledger().timestamp(),
+        schema_version: 1,
+        revoked: false,
     };
 
     // Persist token
@@ -65,7 +73,7 @@ pub fn mint_vaccination(
     // Update patient token list
     let mut patient_tokens = tokens;
     patient_tokens.push_back(token_id);
-    env.storage().persistent().set(&DataKey::PatientTokens(patient.clone()), &patient_tokens);
+    env.storage().persistent().set(&DataKey::PatientTokens(hash_address(env, &patient)), &patient_tokens);
 
     // Increment next token ID
     env.storage().persistent().set(&DataKey::NextTokenId, &(token_id + 1));
