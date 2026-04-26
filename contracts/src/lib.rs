@@ -16,6 +16,7 @@ pub enum ContractError {
     Unauthorized = 3,
     ProposalExpired = 4,
     NoPendingTransfer = 5,
+    RecordLimitExceeded = 6,
 }
 
 #[contract]
@@ -77,6 +78,13 @@ impl VacciChainContract {
             .persistent()
             .get(&DataKey::Issuer(address))
             .unwrap_or(false)
+    }
+
+    /// Admin: set the maximum number of vaccination records per patient (default: 50)
+    pub fn set_patient_record_limit(env: Env, limit: u32) {
+        let admin: Address = env.storage().persistent().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().persistent().set(&DataKey::PatientRecordLimit, &limit);
     }
 
     /// Admin: propose a new admin (two-step transfer). Proposal expires after 24 hours.
@@ -214,8 +222,45 @@ mod tests {
     }
 
     #[test]
-    fn test_double_init_rejected() {
+    #[should_panic(expected = "record limit exceeded")]
+    fn test_record_limit_exceeded() {
         let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(VacciChainContract, ());
+        let client = VacciChainContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let issuer = Address::generate(&env);
+        let patient = Address::generate(&env);
+
+        client.initialize(&admin).unwrap();
+        client.add_issuer(&issuer);
+        client.set_patient_record_limit(&2u32);
+
+        client.mint_vaccination(
+            &patient,
+            &String::from_str(&env, "COVID-19"),
+            &String::from_str(&env, "2024-01-15"),
+            &issuer,
+        );
+        client.mint_vaccination(
+            &patient,
+            &String::from_str(&env, "Flu"),
+            &String::from_str(&env, "2024-02-01"),
+            &issuer,
+        );
+        // Third mint should fail — limit is 2
+        client.mint_vaccination(
+            &patient,
+            &String::from_str(&env, "Hepatitis B"),
+            &String::from_str(&env, "2024-03-01"),
+            &issuer,
+        );
+    }
+
+    #[test]
+    fn test_double_init_rejected() {        let env = Env::default();
         env.mock_all_auths();
 
         let contract_id = env.register(VacciChainContract, ());

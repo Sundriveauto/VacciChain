@@ -41,6 +41,16 @@ pub fn mint_vaccination(
         }
     }
 
+    // Enforce per-patient record limit (default: 50)
+    let limit: u32 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::PatientRecordLimit)
+        .unwrap_or(50u32);
+    if tokens.len() >= limit {
+        panic!("record limit exceeded");
+    }
+
     // Assign token ID
     let token_id: u64 = env
         .storage()

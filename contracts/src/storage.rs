@@ -21,4 +21,5 @@ pub enum DataKey {
     PatientTokens(Address),
     Token(u64),
     NextTokenId,
+    PatientRecordLimit,
 }
