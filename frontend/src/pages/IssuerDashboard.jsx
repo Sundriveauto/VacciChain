@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useFreighter';
 import { useVaccination } from '../hooks/useVaccination';
+import ConfirmMintDialog from '../components/ConfirmMintDialog';
 
 const styles = {
   page: { maxWidth: 500, width: '100%', margin: '2rem auto', padding: '0 1rem', boxSizing: 'border-box' },
@@ -22,7 +23,7 @@ const EMPTY_FORM = { patient_address: '', vaccine_name: '', date_administered: '
 export default function IssuerDashboard() {
   const { t } = useTranslation();
   const { publicKey, role, connect } = useAuth();
-  const { issueVaccination, loading, error } = useVaccination();
+  const { issueVaccination, loading } = useVaccination();
 
   const [form, setForm] = useState(() => {
     try {
@@ -33,7 +34,8 @@ export default function IssuerDashboard() {
     }
   });
   const [touched, setTouched] = useState({});
-  const [success, setSuccess] = useState(null);
+  const [mintResult, setMintResult] = useState(null);
+  const [confirming, setConfirming] = useState(false);
 
   const validate = (f) => {
     const errors = {};
@@ -58,8 +60,8 @@ export default function IssuerDashboard() {
   if (!publicKey) {
     return (
       <div style={styles.page}>
-        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>{t('issuer.connectPrompt')}</p>
-        <button style={styles.btn} onClick={connect}>{t('issuer.connectWallet')}</button>
+        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>Connect your issuer wallet.</p>
+        <button style={styles.btn} onClick={connect} aria-label="Connect issuer wallet">Connect Wallet</button>
       </div>
     );
   }
@@ -70,10 +72,9 @@ export default function IssuerDashboard() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSuccess(null);
     const result = await issueVaccination(form);
     if (result) {
-      setSuccess(t('issuer.success', { tokenId: result.token_id }));
+      setMintResult(result);
       setForm(EMPTY_FORM);
       sessionStorage.removeItem(FORM_KEY);
     }
@@ -87,36 +88,45 @@ export default function IssuerDashboard() {
 
   return (
     <div style={styles.page}>
-      <h2 style={{ marginBottom: '1.5rem', color: '#e2e8f0' }}>{t('issuer.title')}</h2>
+      <h2 style={{ marginBottom: '1.5rem', color: 'var(--text)' }}>Issue Vaccination NFT</h2>
       <form style={styles.form} onSubmit={handleSubmit}>
-        {fields.map(({ key, label, placeholder, type }) => {
-          const hasError = touched[key] && errors[key];
-          return (
-            <div key={key}>
-              <p style={styles.label}>{label}</p>
-              <input
-                style={hasError ? styles.inputError : styles.input}
-                type={type}
-                placeholder={placeholder}
-                value={form[key]}
-                max={key === 'date_administered' ? today() : undefined}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                onBlur={() => setTouched((t) => ({ ...t, [key]: true }))}
-              />
-              {hasError && <p style={styles.fieldError}>{errors[key]}</p>}
-            </div>
-          );
-        })}
-        <button
-          style={isValid && !loading ? styles.btn : styles.btnDisabled}
-          type="submit"
-          disabled={!isValid || loading}
-        >
-          {loading ? t('issuer.submitting') : t('issuer.submit')}
+        {[
+          { key: 'patient_address', label: 'Patient Stellar Address', placeholder: 'G...' },
+          { key: 'vaccine_name', label: 'Vaccine Name', placeholder: 'e.g. COVID-19' },
+          { key: 'date_administered', label: 'Date Administered', placeholder: 'YYYY-MM-DD' },
+        ].map(({ key, label, placeholder }) => (
+          <div key={key}>
+            <label htmlFor={key} style={styles.label}>{label}</label>
+            <input
+              id={key}
+              style={styles.input}
+              placeholder={placeholder}
+              value={form[key]}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+              required
+            />
+          </div>
+        ))}
+        <button style={styles.btn} type="submit" disabled={loading} aria-disabled={loading}>
+          {loading ? 'Minting…' : 'Issue Vaccination NFT'}
         </button>
       </form>
-      {error && <p style={{ color: '#f87171', marginTop: '1rem' }}>{t('issuer.error', { message: error })}</p>}
-      {success && <p style={{ color: '#4ade80', marginTop: '1rem' }}>{success}</p>}
+      <div aria-live="polite" aria-atomic="true">
+        {mintResult && (
+          <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: '#0f172a', borderRadius: 8, color: '#4ade80' }}>
+            <p>✅ Vaccination NFT minted!</p>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>Token ID: {mintResult.tokenId}</p>
+            <a
+              href={`https://stellar.expert/explorer/testnet/tx/${mintResult.transactionHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: '0.85rem', color: '#0ea5e9' }}
+            >
+              View on Stellar Explorer ↗
+            </a>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
