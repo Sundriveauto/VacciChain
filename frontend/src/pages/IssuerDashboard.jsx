@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useFreighter';
 import { useVaccination } from '../hooks/useVaccination';
 
@@ -15,24 +16,11 @@ const styles = {
 
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 const today = () => new Date().toISOString().split('T')[0];
-
-function validate(form) {
-  const errors = {};
-  if (!STELLAR_ADDRESS_RE.test(form.patient_address))
-    errors.patient_address = 'Must be a valid Stellar public key (G…, 56 chars)';
-  if (!form.vaccine_name.trim())
-    errors.vaccine_name = 'Vaccine name is required';
-  if (!form.date_administered)
-    errors.date_administered = 'Date is required';
-  else if (form.date_administered > today())
-    errors.date_administered = 'Date cannot be in the future';
-  return errors;
-}
-
 const FORM_KEY = 'issuer_form_draft';
 const EMPTY_FORM = { patient_address: '', vaccine_name: '', date_administered: '' };
 
 export default function IssuerDashboard() {
+  const { t } = useTranslation();
   const { publicKey, role, connect } = useAuth();
   const { issueVaccination, loading, error } = useVaccination();
 
@@ -47,10 +35,22 @@ export default function IssuerDashboard() {
   const [touched, setTouched] = useState({});
   const [success, setSuccess] = useState(null);
 
+  const validate = (f) => {
+    const errors = {};
+    if (!STELLAR_ADDRESS_RE.test(f.patient_address))
+      errors.patient_address = t('issuer.validation.invalidAddress');
+    if (!f.vaccine_name.trim())
+      errors.vaccine_name = t('issuer.validation.vaccineRequired');
+    if (!f.date_administered)
+      errors.date_administered = t('issuer.validation.dateRequired');
+    else if (f.date_administered > today())
+      errors.date_administered = t('issuer.validation.dateFuture');
+    return errors;
+  };
+
   const errors = validate(form);
   const isValid = Object.keys(errors).length === 0;
 
-  // Persist form draft on every change
   useEffect(() => {
     sessionStorage.setItem(FORM_KEY, JSON.stringify(form));
   }, [form]);
@@ -58,14 +58,14 @@ export default function IssuerDashboard() {
   if (!publicKey) {
     return (
       <div style={styles.page}>
-        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>Connect your issuer wallet.</p>
-        <button style={styles.btn} onClick={connect}>Connect Wallet</button>
+        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>{t('issuer.connectPrompt')}</p>
+        <button style={styles.btn} onClick={connect}>{t('issuer.connectWallet')}</button>
       </div>
     );
   }
 
   if (role !== 'issuer') {
-    return <div style={styles.page}><p style={{ color: '#f87171' }}>Access denied: issuer role required.</p></div>;
+    return <div style={styles.page}><p style={{ color: '#f87171' }}>{t('issuer.accessDenied')}</p></div>;
   }
 
   const handleSubmit = async (e) => {
@@ -73,21 +73,21 @@ export default function IssuerDashboard() {
     setSuccess(null);
     const result = await issueVaccination(form);
     if (result) {
-      setSuccess(`Vaccination NFT minted! Token ID: ${result.token_id}`);
+      setSuccess(t('issuer.success', { tokenId: result.token_id }));
       setForm(EMPTY_FORM);
       sessionStorage.removeItem(FORM_KEY);
     }
   };
 
   const fields = [
-    { key: 'patient_address', label: 'Patient Stellar Address', placeholder: 'G...', type: 'text' },
-    { key: 'vaccine_name', label: 'Vaccine Name', placeholder: 'e.g. COVID-19', type: 'text' },
-    { key: 'date_administered', label: 'Date Administered', placeholder: '', type: 'date' },
+    { key: 'patient_address', label: t('issuer.patientAddress'), placeholder: 'G...', type: 'text' },
+    { key: 'vaccine_name', label: t('issuer.vaccineName'), placeholder: t('issuer.vaccineNamePlaceholder'), type: 'text' },
+    { key: 'date_administered', label: t('issuer.dateAdministered'), placeholder: '', type: 'date' },
   ];
 
   return (
     <div style={styles.page}>
-      <h2 style={{ marginBottom: '1.5rem', color: '#e2e8f0' }}>Issue Vaccination NFT</h2>
+      <h2 style={{ marginBottom: '1.5rem', color: '#e2e8f0' }}>{t('issuer.title')}</h2>
       <form style={styles.form} onSubmit={handleSubmit}>
         {fields.map(({ key, label, placeholder, type }) => {
           const hasError = touched[key] && errors[key];
@@ -112,11 +112,11 @@ export default function IssuerDashboard() {
           type="submit"
           disabled={!isValid || loading}
         >
-          {loading ? 'Minting…' : 'Issue Vaccination NFT'}
+          {loading ? t('issuer.submitting') : t('issuer.submit')}
         </button>
       </form>
-      {error && <p style={{ color: '#f87171', marginTop: '1rem' }}>Error: {error}</p>}
-      {success && <p style={{ color: '#4ade80', marginTop: '1rem' }}>✅ {success}</p>}
+      {error && <p style={{ color: '#f87171', marginTop: '1rem' }}>{t('issuer.error', { message: error })}</p>}
+      {success && <p style={{ color: '#4ade80', marginTop: '1rem' }}>{success}</p>}
     </div>
   );
 }

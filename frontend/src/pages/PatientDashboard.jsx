@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useFreighter';
 import { useVaccination } from '../hooks/useVaccination';
 import { usePagination } from '../hooks/usePagination';
@@ -17,6 +18,7 @@ const styles = {
 };
 
 export default function PatientDashboard() {
+  const { t } = useTranslation();
   const { publicKey, connect } = useAuth();
   const { fetchRecords, loading, error } = useVaccination();
   const [records, setRecords] = useState([]);
@@ -34,8 +36,8 @@ export default function PatientDashboard() {
   if (!publicKey) {
     return (
       <div style={styles.page}>
-        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>Connect your wallet to view records.</p>
-        <button style={styles.btn} onClick={connect}>Connect Wallet</button>
+        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>{t('patient.connectPrompt')}</p>
+        <button style={styles.btn} onClick={connect}>{t('patient.connectWallet')}</button>
       </div>
     );
   }
@@ -43,16 +45,20 @@ export default function PatientDashboard() {
   return (
     <div style={styles.page}>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ color: '#e2e8f0', margin: 0 }}>My Vaccination Records</h2>
+        <h2 style={{ color: '#e2e8f0', margin: 0 }}>{t('patient.title')}</h2>
         {total > 0 && (
-          <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{total} record{total !== 1 ? 's' : ''}</span>
+          <span style={{ color: '#64748b', fontSize: '0.85rem' }}>
+            {t('patient.recordCount', { count: total })}
+          </span>
         )}
       </div>
-      <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.5rem', wordBreak: 'break-all' }}>Wallet: {publicKey}</p>
+      <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.5rem', wordBreak: 'break-all' }}>
+        {t('patient.wallet', { address: publicKey })}
+      </p>
 
-      {loading && <p style={{ color: '#94a3b8' }}>Loading…</p>}
-      {error && <p style={{ color: '#f87171' }}>Error: {error}</p>}
-      {!loading && total === 0 && <p style={{ color: '#94a3b8' }}>No vaccination records found.</p>}
+      {loading && <p style={{ color: '#94a3b8' }}>{t('patient.loading')}</p>}
+      {error && <p style={{ color: '#f87171' }}>{t('patient.error', { message: error })}</p>}
+      {!loading && total === 0 && <p style={{ color: '#94a3b8' }}>{t('patient.noRecords')}</p>}
 
       {currentItems.map((r) => <NFTCard key={r.token_id} record={r} />)}
 
@@ -64,10 +70,10 @@ export default function PatientDashboard() {
             disabled={page === 1}
             aria-label="Previous page"
           >
-            ‹ Prev
+            {t('patient.prevPage')}
           </button>
           <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-            Page {page} of {totalPages}
+            {t('patient.pageOf', { page, total: totalPages })}
           </span>
           <button
             style={{ ...styles.pageBtn, ...(page === totalPages ? styles.pageBtnDisabled : {}) }}
@@ -75,7 +81,7 @@ export default function PatientDashboard() {
             disabled={page === totalPages}
             aria-label="Next page"
           >
-            Next ›
+            {t('patient.nextPage')}
           </button>
         </nav>
       )}

@@ -1,4 +1,8 @@
+import { useTranslation } from 'react-i18next';
+
 export default function NFTCard({ record, onClick }) {
+  const { t } = useTranslation();
+
   return (
     <div
       role="button"
@@ -27,10 +31,10 @@ export default function NFTCard({ record, onClick }) {
         <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>#{record.token_id}</span>
       </div>
       <p style={{ color: '#94a3b8', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-        Date: {record.date_administered}
+        {t('nftCard.date', { date: record.date_administered })}
       </p>
       <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-        Issuer: {record.issuer?.slice(0, 8)}…{record.issuer?.slice(-4)}
+        {t('nftCard.issuer', { address: `${record.issuer?.slice(0, 8)}…${record.issuer?.slice(-4)}` })}
       </p>
     </div>
   );
