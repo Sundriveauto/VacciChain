@@ -28,7 +28,25 @@ pub fn mint_vaccination(
         return Err(ContractError::Unauthorized);
     }
 
-    // Duplicate detection: (patient, vaccine_name, date_administered) must be unique
+    // Compute deterministic token_id:
+    //   SHA-256(patient_xdr || vaccine_name || date_administered || issuer_xdr || ledger_sequence)
+    //   truncated to first 8 bytes as big-endian u64.
+    let ledger_sequence = env.ledger().sequence();
+    let token_id = compute_token_id(
+        env,
+        &patient,
+        &vaccine_name,
+        &date_administered,
+        &issuer,
+        ledger_sequence,
+    );
+
+    // Duplicate detection: token_id collision means identical record already exists
+    if env.storage().persistent().has(&DataKey::Token(token_id)) {
+        return Err(ContractError::DuplicateRecord);
+    }
+
+    // Also check patient's existing tokens for same (vaccine_name, date_administered)
     let tokens: Vec<u64> = env
         .storage()
         .persistent()

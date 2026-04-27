@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(test)]
+extern crate std;
+
 mod storage;
 mod events;
 mod mint;
@@ -10,22 +13,22 @@ use storage::{DataKey, IssuerRecord, VaccinationRecord};
 
 /// Contract errors.
 ///
-/// | Code | Name             | Description                                      |
-/// |------|------------------|--------------------------------------------------|
-/// | 1    | AlreadyInitialized | Contract has already been initialized           |
-/// | 2    | NotInitialized   | Contract has not been initialized                |
-/// | 3    | Unauthorized     | Caller is not an authorized issuer               |
-/// | 4    | ProposalExpired  | Admin transfer proposal has expired              |
-/// | 5    | NoPendingTransfer | No pending admin transfer exists                |
+/// | Code | Name                         | Description                                      |
+/// |------|------------------------------|--------------------------------------------------|
+/// | 1    | AlreadyInitialized           | Contract has already been initialized            |
+/// | 2    | NotInitialized               | Contract has not been initialized                |
+/// | 3    | Unauthorized                 | Caller is not an authorized issuer               |
+/// | 4    | ProposalExpired              | Admin transfer proposal has expired              |
+/// | 5    | NoPendingTransfer            | No pending admin transfer exists                 |
 /// | 6    | DuplicateRecord              | Identical vaccination record already exists      |
 /// | 7    | RecordNotFound               | Vaccination record does not exist                |
-/// | 8    | AlreadyRevoked               | Vaccination record is already revoked           |
+/// | 8    | AlreadyRevoked               | Vaccination record is already revoked            |
 /// | 9    | InvalidInput                 | Input failed validation at the contract boundary |
-/// | 10   | InvalidInputVaccineName      | vaccine_name exceeds maximum length             |
-/// | 11   | InvalidInputDateAdministered | date_administered exceeds maximum length        |
-/// | 12   | InvalidInputIssuerName       | issuer name exceeds maximum length              |
-/// | 13   | InvalidInputLicense          | issuer license exceeds maximum length           |
-/// | 14   | InvalidInputCountry          | issuer country exceeds maximum length           |
+/// | 10   | InvalidInputVaccineName      | vaccine_name exceeds maximum length              |
+/// | 11   | InvalidInputDateAdministered | date_administered exceeds maximum length         |
+/// | 12   | InvalidInputIssuerName       | issuer name exceeds maximum length               |
+/// | 13   | InvalidInputLicense          | issuer license exceeds maximum length            |
+/// | 14   | InvalidInputCountry          | issuer country exceeds maximum length            |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ContractError {
@@ -48,7 +51,7 @@ pub enum ContractError {
 
 const MAX_STRING_LENGTH: u32 = 100;
 
-fn validate_input_length(field: &String, field_name: &str) -> Result<(), ContractError> {
+pub(crate) fn validate_input_length(field: &String, field_name: &str) -> Result<(), ContractError> {
     if field.len() > MAX_STRING_LENGTH {
         return Err(match field_name {
             "vaccine_name" => ContractError::InvalidInputVaccineName,
@@ -67,7 +70,7 @@ pub struct VacciChainContract;
 
 #[contractimpl]
 impl VacciChainContract {
-    /// Initialize contract with an admin address
+    /// Initialize contract with an admin address.
     pub fn initialize(env: Env, admin: Address) -> Result<(), ContractError> {
         if env.storage().persistent().has(&DataKey::Initialized) {
             return Err(ContractError::AlreadyInitialized);
@@ -78,7 +81,7 @@ impl VacciChainContract {
         Ok(())
     }
 
-    /// Admin: authorize a new issuer with metadata
+    /// Admin: authorize a new issuer with metadata.
     pub fn add_issuer(
         env: Env,
         issuer: Address,
@@ -86,7 +89,11 @@ impl VacciChainContract {
         license: String,
         country: String,
     ) -> Result<(), ContractError> {
-        let admin: Address = env.storage().persistent().get(&DataKey::Admin).expect("not initialized");
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
         validate_input_length(&name, "name")?;
         validate_input_length(&license, "license")?;
@@ -121,16 +128,20 @@ impl VacciChainContract {
         Ok(())
     }
 
-    /// Public: get issuer metadata
+    /// Public: get issuer metadata.
     pub fn get_issuer(env: Env, address: Address) -> Option<IssuerRecord> {
         env.storage()
             .persistent()
             .get(&DataKey::IssuerMeta(hash_address(&env, &address)))
     }
 
-    /// Admin: revoke an issuer
-    pub fn revoke_issuer(env: Env, issuer: Address) {
-        let admin: Address = env.storage().persistent().get(&DataKey::Admin).expect("not initialized");
+    /// Admin: revoke an issuer.
+    pub fn revoke_issuer(env: Env, issuer: Address) -> Result<(), ContractError> {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
 
         if let Some(mut record) = env
@@ -143,9 +154,11 @@ impl VacciChainContract {
                 .persistent()
                 .set(&DataKey::IssuerMeta(hash_address(&env, &issuer)), &record);
         }
+        Ok(())
     }
 
-    /// Issuer: mint a soulbound vaccination NFT
+    /// Issuer: mint a soulbound vaccination NFT.
+    /// Returns the deterministic token_id (u64).
     pub fn mint_vaccination(
         env: Env,
         patient: Address,
@@ -157,7 +170,7 @@ impl VacciChainContract {
     }
 
     /// Original issuer or admin: revoke a vaccination record.
-    /// The record is marked revoked: true but never deleted (audit trail preserved).
+    /// The record is marked revoked but never deleted (audit trail preserved).
     pub fn revoke_vaccination(env: Env, token_id: u64, revoker: Address) -> Result<(), ContractError> {
         revoker.require_auth();
 
@@ -171,7 +184,6 @@ impl VacciChainContract {
             return Err(ContractError::AlreadyRevoked);
         }
 
-        // Only the original issuer or the current admin may revoke
         let admin: Address = env
             .storage()
             .persistent()
@@ -184,11 +196,8 @@ impl VacciChainContract {
 
         record.revoked = true;
         env.storage().persistent().set(&DataKey::Token(token_id), &record);
-        // Also set a dedicated revocation flag for fast lookup
         env.storage().persistent().set(&DataKey::Revoked(token_id), &true);
-
         events::emit_revoked(&env, token_id, &revoker);
-
         Ok(())
     }
 
@@ -197,17 +206,17 @@ impl VacciChainContract {
         Err(ContractError::SoulboundToken)
     }
 
-    /// Public: verify vaccination status for a wallet
+    /// Public: verify vaccination status for a wallet.
     pub fn verify_vaccination(env: Env, wallet: Address) -> (bool, Vec<VaccinationRecord>) {
         verify::verify_vaccination(&env, wallet)
     }
 
-    /// Public: batch verify vaccination status for multiple wallets (max 100)
+    /// Public: batch verify vaccination status for multiple wallets (max 100).
     pub fn batch_verify(env: Env, wallets: Vec<Address>) -> Vec<(Address, bool, Vec<VaccinationRecord>)> {
         verify::batch_verify(&env, wallets)
     }
 
-    /// Check if an address is an authorized issuer
+    /// Check if an address is an authorized issuer.
     pub fn is_issuer(env: Env, address: Address) -> bool {
         env.storage()
             .persistent()
@@ -253,7 +262,10 @@ impl VacciChainContract {
 
     /// Admin: propose a new admin (two-step transfer). Proposal expires after 24 hours.
     pub fn propose_admin(env: Env, new_admin: Address) -> Result<(), ContractError> {
-        let admin: Address = env.storage().persistent().get(&DataKey::Admin)
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
             .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
         let expires_at = env.ledger().timestamp() + 86400;
@@ -265,9 +277,15 @@ impl VacciChainContract {
 
     /// Proposed admin: accept the admin role.
     pub fn accept_admin(env: Env) -> Result<(), ContractError> {
-        let pending: Address = env.storage().persistent().get(&DataKey::PendingAdmin)
+        let pending: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::PendingAdmin)
             .ok_or(ContractError::NoPendingTransfer)?;
-        let expires_at: u64 = env.storage().persistent().get(&DataKey::AdminTransferExpiry)
+        let expires_at: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AdminTransferExpiry)
             .ok_or(ContractError::NoPendingTransfer)?;
         if env.ledger().timestamp() > expires_at {
             return Err(ContractError::ProposalExpired);
@@ -282,7 +300,10 @@ impl VacciChainContract {
 
     /// Admin: upgrade the contract WASM.
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), ContractError> {
-        let admin: Address = env.storage().persistent().get(&DataKey::Admin)
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
             .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
         env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
@@ -342,16 +363,20 @@ mod tests {
             &String::from_str(&env, "General Hospital"),
             &String::from_str(&env, "LIC-12345"),
             &String::from_str(&env, "USA"),
-        ).unwrap();
+        );
 
-        let token_id = client.mint_vaccination(
-            &patient,
-            &String::from_str(&env, "COVID-19"),
-            &String::from_str(&env, "2024-01-15"),
-            &issuer,
-        ).unwrap();
+        let vaccine = String::from_str(&env, "COVID-19");
+        let date = String::from_str(&env, "2024-01-15");
+        let seq = env.ledger().sequence();
 
-        assert_eq!(token_id, 1);
+        let token_id = client.mint_vaccination(&patient, &vaccine, &date, &issuer);
+
+        // token_id must be a non-zero u64 (hash-derived)
+        assert_ne!(token_id, 0);
+
+        // token_id must match the deterministic scheme
+        let expected = compute_token_id(&env, &patient, &vaccine, &date, &issuer, seq);
+        assert_eq!(token_id, expected);
 
         let (vaccinated, records) = client.verify_vaccination(&patient);
         assert!(vaccinated);
@@ -387,14 +412,14 @@ mod tests {
             &String::from_str(&env, "General Hospital"),
             &String::from_str(&env, "LIC-12345"),
             &String::from_str(&env, "USA"),
-        ).unwrap();
+        );
 
         client.mint_vaccination(
             &patient,
             &String::from_str(&env, "COVID-19"),
             &String::from_str(&env, "2024-01-15"),
             &issuer,
-        ).unwrap();
+        );
 
         let result = client.try_mint_vaccination(
             &patient,
@@ -436,7 +461,7 @@ mod tests {
             &String::from_str(&env, "General Hospital"),
             &String::from_str(&env, "LIC-12345"),
             &String::from_str(&env, "USA"),
-        ).unwrap();
+        );
 
         let token_id = client.mint_vaccination(
             &patient,
